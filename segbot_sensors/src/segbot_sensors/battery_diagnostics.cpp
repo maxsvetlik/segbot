@@ -13,9 +13,9 @@
 #include <boost/thread.hpp>
 #include <boost/lexical_cast.hpp>
 
-float voltage = 0.0;
+float voltage = 13.0;
 bool sentMail = false;
-float alpha;
+double alpha;
 
 void voltageCallback(const smart_battery_msgs::SmartBatteryStatus::ConstPtr& msg){
   voltage = alpha * msg->voltage + (1.0 - alpha) * voltage;
@@ -64,7 +64,7 @@ int main(int argc, char **argv){
   std::ostringstream ss;
 
   //parameters
-  n.param<std::string>("weighted_average_const", alpha, .25);
+  n.param("weighted_average_const", alpha, .25);
 
   while (ros::ok()){
     voltages_val.value = boost::lexical_cast<std::string>(voltage);
