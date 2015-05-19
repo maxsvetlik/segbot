@@ -25,9 +25,9 @@
 #include <boost/thread.hpp>
 #include <boost/lexical_cast.hpp>
 #include <iostream>
-
+#include <math.h>
 int sample_frequency = .1; //frequency in hz; assume at least 5 hours of data
-double sum_v, sum_v2, sum_time, sum_vtime, a, b;
+double sum_v, sum_v2, sum_time, sum_vtime, a, b, A;
 bool complete;
 int n = 0;
 
@@ -36,10 +36,11 @@ void voltagecb(){
     if(voltage == NULL){
         ROS_INFO("Error: curvefitting not computing. Voltage data non-existent or bad. Is it being published?");
     } else if(voltage > 10.0 && !complete){
-        a = ((sum_v2*sum_time - sum_v*sum_vtime)/(n*sum_v2 - sum_v*sum_time));
+        a = ((sum_v2*sum_time - sum_v*sum_vtime)/(n*sum_v2 - sum_v*sum_v));
         b = ((n*sum_vtime - sum_v*sum_time)/(n*sum_v2 - sum_v*sum_v));
+        A = exp(a);
         ROS_INFO("Curve estimation complete. Writing to file. a: %f b: %f", a, b);
-        writeToFile(a, b);
+        writeToFile(A, b);
         complete = true;
     } else if(!complete){
         n++;
