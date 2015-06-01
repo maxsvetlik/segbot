@@ -33,21 +33,21 @@
 
 typedef actionlib::SimpleActionClient<bwi_kr_execution::ExecutePlanAction> Client;
 
-int sample_frequency = .1; //frequency in hz; assume at least 5 hours of data
+int sample_frequency = 1; //frequency in hz; assume at least 5 hours of data
 double sum_v, sum_v2, sum_time, sum_vtime, a, b, A;
 bool complete;
 int n = 0;
 std::vector<std::string> voltages;
 std::vector<double> times;
-ros::Time start;
+double start;
 
 //compute curve fitting sums while voltage exists and is above 10 
 void voltagecb(diagnostic_msgs::DiagnosticArray msg){
     for(int i = 0; i < msg.status.size(); i++){
-        if( msg.status.at(i).name.compare("/Battery/voltage")){
+        if( !msg.status.at(i).name.compare("/Battery/voltage")){
             voltages.push_back(msg.status.at(i).values.at(0).value);
-            times.push_back(((ros::Time::now() - start).toSec()));
-            ROS_INFO("Got Voltage: %s at time %f", msg.status.at(i).values.at(0).value.c_str(), (ros::Time::now() - start).toSec());
+            times.push_back(ros::Time::now().toSec() - start);
+            ROS_INFO("Got Voltage: %s at time %f", msg.status.at(i).values.at(0).value.c_str(), ros::Time::now().toSec() - start);
         }
     }
 }
@@ -73,14 +73,14 @@ int main(int argc, char **argv){
   Client client("/action_executor/execute_plan", true);
   client.waitForServer();
   bool fromAtoB = true;
+  start = ros::Time::now().toSec();
+  ros::Rate loop_rate(sample_frequency);
+  
   //subscribe to diagnostics agg and parse for voltage name, use key as value
   ros::Subscriber voltage_sub = n.subscribe("/diagnostics_agg", 10, voltagecb);
-  ros::Rate loop_rate(sample_frequency);
-  start = ros::Time::now();
 
   //movement based on 'back and forth' node bwi_task
   while(ros::ok() && !complete){
-      ros::spinOnce();
       std::string loc = (fromAtoB)? loc_b : loc_a;
       fromAtoB = !fromAtoB;
       //ROS_INFO_STREAM("going to " << loc);
@@ -90,10 +90,12 @@ int main(int argc, char **argv){
       bwi_kr_execution::AspFluent fluent;
       fluent.name = "not at";
       ROS_INFO("Sending goal");
+      client.sendGoalAndWait(goal);
 
       if ( client.getState() == actionlib::SimpleClientGoalState::ABORTED){
       }
       //etc
+      ros::spinOnce();
       loop_rate.sleep();
   }
   return 0;
