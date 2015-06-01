@@ -10,6 +10,8 @@
  * Author: Maxwell J. Svetlik, 2015
  */
 
+//TODO: add time calculations, get actual topic name, add getHostname functionality
+
 #include "ros/ros.h"
 #include "ros/time.h"
 #include <vector>
@@ -26,31 +28,30 @@
 #include <boost/lexical_cast.hpp>
 #include <iostream>
 #include <math.h>
+#include "bwi_kr_execution/ExecutePlanAction.h"
+#include <actionlib/client/simple_action_client.h>
+
+typedef actionlib::SimpleActionClient<bwi_kr_execution::ExecutePlanAction> Client;
+
 int sample_frequency = .1; //frequency in hz; assume at least 5 hours of data
 double sum_v, sum_v2, sum_time, sum_vtime, a, b, A;
 bool complete;
 int n = 0;
+std::vector<std::string> voltages;
+std::vector<double> times;
+ros::Time start;
 
 //compute curve fitting sums while voltage exists and is above 10 
-void voltagecb(){
-    if(voltage == NULL){
-        ROS_INFO("Error: curvefitting not computing. Voltage data non-existent or bad. Is it being published?");
-    } else if(voltage > 10.0 && !complete){
-        a = ((sum_v2*sum_time - sum_v*sum_vtime)/(n*sum_v2 - sum_v*sum_v));
-        b = ((n*sum_vtime - sum_v*sum_time)/(n*sum_v2 - sum_v*sum_v));
-        A = exp(a);
-        ROS_INFO("Curve estimation complete. Writing to file. a: %f b: %f", a, b);
-        writeToFile(A, b);
-        complete = true;
-    } else if(!complete){
-        n++;
-        sum_v = sumv + voltage;
-        sum_v2 = sum_v2 + voltage*voltage;
-        sum_time = sum_time + time_since_last_update;
-        sum_vtime = sum_vtime + voltage*time_since_last_update;
+void voltagecb(diagnostic_msgs::DiagnosticArray msg){
+    for(int i = 0; i < msg.status.size(); i++){
+        if( msg.status.at(i).name.compare("/Battery/voltage")){
+            voltages.push_back(msg.status.at(i).values.at(0).value);
+            times.push_back(((ros::Time::now() - start).toSec()));
+            ROS_INFO("Got Voltage: %s at time %f", msg.status.at(i).values.at(0).value.c_str(), (ros::Time::now() - start).toSec());
+        }
     }
 }
-
+/*
 void writeToFile(double a, double b){
     std::ofstream file;
     //Note, the line below will not work. I have to reference the rospackage path.
@@ -59,15 +60,40 @@ void writeToFile(double a, double b){
     file << a << "," << b;
     file.close();
     ROS_INFO("File written.");
-}
+}*/
 
 int main(int argc, char **argv){
   ros::init(argc, argv, "battery_profiler");
   ros::NodeHandle n;
-  //ros::Subscriber voltage_sub = n.subscribe("/Diagnostics/voltage", 10, voltagecb);
+  ros::NodeHandle privateNode("~");
+  std::string loc_a, loc_b;
+  privateNode.param<std::string>("a",loc_a,"l3_414b");
+  privateNode.param<std::string>("b",loc_b,"l3_516");
+
+  Client client("/action_executor/execute_plan", true);
+  client.waitForServer();
+  bool fromAtoB = true;
+  //subscribe to diagnostics agg and parse for voltage name, use key as value
+  ros::Subscriber voltage_sub = n.subscribe("/diagnostics_agg", 10, voltagecb);
   ros::Rate loop_rate(sample_frequency);
+  start = ros::Time::now();
+
+  //movement based on 'back and forth' node bwi_task
   while(ros::ok() && !complete){
       ros::spinOnce();
+      std::string loc = (fromAtoB)? loc_b : loc_a;
+      fromAtoB = !fromAtoB;
+      //ROS_INFO_STREAM("going to " << loc);
+      bwi_kr_execution::ExecutePlanGoal goal;
+
+      bwi_kr_execution::AspRule rule;
+      bwi_kr_execution::AspFluent fluent;
+      fluent.name = "not at";
+      ROS_INFO("Sending goal");
+
+      if ( client.getState() == actionlib::SimpleClientGoalState::ABORTED){
+      }
+      //etc
       loop_rate.sleep();
   }
   return 0;
