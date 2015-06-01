@@ -16,7 +16,8 @@ find_package(catkin REQUIRED
     sensor_msgs
     smart_battery_msgs
     std_msgs
-    tf)
+    tf
+    bwi_kr_execution)
 
 catkin_python_setup()
 
@@ -54,6 +55,9 @@ target_link_libraries(battery_diagnostics ${catkin_LIBRARIES})
 
 add_executable(fake_volt_pub src/segbot_sensors/fake_volt_pub.cpp)
 target_link_libraries(fake_volt_pub ${catkin_LIBRARIES})
+
+add_executable(battery_profiler src/segbot_sensors/battery_profiler.cpp)
+target_link_libraries(battery_profiler ${catkin_LIBRARIES})
 
 # Install the plugin and the plugin description
 install (DIRECTORY include/segbot_sensors/
