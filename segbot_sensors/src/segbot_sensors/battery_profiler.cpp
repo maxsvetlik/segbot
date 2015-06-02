@@ -10,7 +10,8 @@
  * Author: Maxwell J. Svetlik, 2015
  */
 
-//TODO: add time calculations, get actual topic name, add getHostname functionality
+//TODO: add time calculations, add getHostname functionality
+// add data interpolation to build actual profile.
 
 #include "ros/ros.h"
 #include "ros/time.h"
@@ -32,6 +33,7 @@
 #include <actionlib/client/simple_action_client.h>
 #include <ros/package.h>
 #include <string>
+#include <signal.h>
 
 typedef actionlib::SimpleActionClient<bwi_kr_execution::ExecutePlanAction> Client;
 
@@ -39,15 +41,25 @@ int sample_frequency = 1; //frequency in hz; assume at least 5 hours of data
 double sum_v, sum_v2, sum_time, sum_vtime, a, b, A;
 bool complete;
 int n = 0;
+//true if Ctrl-C is pressed
+bool g_caught_sigint=false;
 std::vector<std::string> voltages;
 std::vector<double> times;
 double start;
 std::string path = ros::package::getPath("segbot_sensors");
 std::ofstream file;
 
+void sig_handler(int sig)
+{
+  g_caught_sigint = true;
+  ROS_INFO("caught sigint, init shutdown sequence...");
+  file.close();
+  ros::shutdown();
+  exit(1);
+};
 
 void writeToFile(double v, double t){
-    file << v << "," << t << "\n";
+    file << t << "," << v << "\n";
 }
 
 //compute curve fitting sums while voltage exists and is above 10 
@@ -68,9 +80,12 @@ int main(int argc, char **argv){
   ros::init(argc, argv, "battery_profiler");
   ros::NodeHandle n;
   ros::NodeHandle privateNode("~");
-  std::string loc_a, loc_b;
-  privateNode.param<std::string>("a",loc_a,"l3_414b");
-  privateNode.param<std::string>("b",loc_b,"l3_414");
+  std::string loc_a;
+  std::string loc_b;
+  privateNode.param<std::string>("a",loc_a,"d3_414b1");
+  privateNode.param<std::string>("b",loc_b,"d3_414b2");
+  
+  signal(SIGINT, sig_handler);
 
   Client client("/action_executor/execute_plan", true);
   client.waitForServer();
@@ -86,16 +101,15 @@ int main(int argc, char **argv){
   std::string final_path = path + "/config/battery_profiler.csv";
   file.open(final_path.c_str());
   
-  //movement based on 'back and forth' node bwi_task
   while(ros::ok() && !complete){
       std::string loc = (fromAtoB)? loc_b : loc_a;
       fromAtoB = !fromAtoB;
-      //ROS_INFO_STREAM("going to " << loc);
+      ROS_INFO("AtoB: %d", fromAtoB);
       bwi_kr_execution::ExecutePlanGoal goal;
 
       bwi_kr_execution::AspRule rule;
       bwi_kr_execution::AspFluent fluent;
-      fluent.name = "not at";
+      fluent.name = "not facing";
       
       fluent.variables.push_back(loc);
       rule.body.push_back(fluent);
@@ -103,16 +117,19 @@ int main(int argc, char **argv){
       
       ROS_INFO("Sending goal");
       client.sendGoal(goal);
-	  while( client.getState() == actionlib::SimpleClientGoalState::ABORTED ||
-			 client.getState() == actionlib::SimpleClientGoalState::SUCCEEDED){
+	  while( client.getState() == actionlib::SimpleClientGoalState::ACTIVE ||
+			 client.getState() == actionlib::SimpleClientGoalState::PENDING) {
 			ros::spinOnce();
+			if (client.getState() == actionlib::SimpleClientGoalState::SUCCEEDED){
+				ROS_INFO("Goal success."); 
+				break;
+			}
 	  }
       if ( client.getState() == actionlib::SimpleClientGoalState::ABORTED){
         ROS_INFO("Goal aborted");
       }
       else if (client.getState() == actionlib::SimpleClientGoalState::SUCCEEDED)
-        ROS_INFO("Goal succeeded.");
-      
+        ROS_INFO("Goal succeeded.");      
       ros::spinOnce();
       loop_rate.sleep();
   }
