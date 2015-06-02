@@ -93,8 +93,11 @@ int main(int argc, char **argv){
       client.sendGoalAndWait(goal);
 
       if ( client.getState() == actionlib::SimpleClientGoalState::ABORTED){
+        ROS_INFO("Goal aborted");
       }
-      //etc
+      else if (client.getState() == actionlib::SimpleClientGoalState::SUCCEEDED)
+        ROS_INFO("Goal succeeded.");
+      
       ros::spinOnce();
       loop_rate.sleep();
   }
