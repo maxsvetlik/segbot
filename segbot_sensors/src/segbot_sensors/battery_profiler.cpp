@@ -89,6 +89,11 @@ int main(int argc, char **argv){
       bwi_kr_execution::AspRule rule;
       bwi_kr_execution::AspFluent fluent;
       fluent.name = "not at";
+      
+      fluent.variables.push_back(loc);
+      rule.body.push_back(fluent);
+      goal.aspGoal.push_back(rule);
+      
       ROS_INFO("Sending goal");
       client.sendGoalAndWait(goal);
 
