@@ -47,8 +47,7 @@ std::ofstream file;
 
 
 void writeToFile(double v, double t){
-    //std::ofstream file;
-    file << v << "," << t;
+    file << v << "," << t << "\n";
 }
 
 //compute curve fitting sums while voltage exists and is above 10 
@@ -60,7 +59,7 @@ void voltagecb(diagnostic_msgs::DiagnosticArray msg){
             double v = std::atof(msg.status.at(i).values.at(0).value.c_str());
             double t = ros::Time::now().toSec() - start;
             writeToFile(v,t);
-            ROS_INFO("Got Voltage: %s at time %f", msg.status.at(i).values.at(0).value.c_str(), ros::Time::now().toSec() - start);
+            ROS_INFO("Got Voltage: %f at time %f", v, t);
         }
     }
 }
@@ -83,7 +82,10 @@ int main(int argc, char **argv){
   ros::Subscriber voltage_sub = n.subscribe("/diagnostics_agg", 10, voltagecb);
 
   std::string path = ros::package::getPath("segbot_sensors");
-
+  ROS_INFO("Package path: %s", path.c_str());
+  std::string final_path = path + "/config/battery_profiler.csv";
+  file.open(final_path.c_str());
+  
   //movement based on 'back and forth' node bwi_task
   while(ros::ok() && !complete){
       std::string loc = (fromAtoB)? loc_b : loc_a;
@@ -100,8 +102,11 @@ int main(int argc, char **argv){
       goal.aspGoal.push_back(rule);
       
       ROS_INFO("Sending goal");
-      client.sendGoalAndWait(goal);
-
+      client.sendGoal(goal);
+	  while( client.getState() == actionlib::SimpleClientGoalState::ABORTED ||
+			 client.getState() == actionlib::SimpleClientGoalState::SUCCEEDED){
+			ros::spinOnce();
+	  }
       if ( client.getState() == actionlib::SimpleClientGoalState::ABORTED){
         ROS_INFO("Goal aborted");
       }
